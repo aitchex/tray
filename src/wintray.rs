@@ -1,10 +1,9 @@
 use bindings::Windows::Win32::{
-    System::SystemServices::{LRESULT, PWSTR},
+    System::SystemServices::{LRESULT, PSTR},
     UI::WindowsAndMessaging::{
-        self, HWND, LPARAM, WM_LBUTTONDOWN, WM_RBUTTONDOWN, WNDCLASSEXW, WPARAM,
+        self, HWND, LPARAM, WM_LBUTTONDOWN, WM_RBUTTONDOWN, WNDCLASSA, WPARAM,
     },
 };
-use windows::HSTRING;
 
 const ICON_ID: u32 = 1;
 
@@ -16,7 +15,7 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
             _ => (),
         },
         _ => unsafe {
-            return WindowsAndMessaging::DefWindowProcW(hwnd, msg, wparam, lparam);
+            return WindowsAndMessaging::DefWindowProcA(hwnd, msg, wparam, lparam);
         },
     }
 
@@ -26,15 +25,13 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
 pub struct WinTray {}
 
 impl WinTray {
-    fn register() -> u16 {
-        let class_name = HSTRING::from("Tray Class").as_wide().to_owned();
-        let wcex = WNDCLASSEXW {
+    fn register_class() -> u16 {
+        let wc = WNDCLASSA {
+            lpszClassName: PSTR(b"window\0".as_ptr() as _),
             lpfnWndProc: Some(window_proc),
-            lpszClassName: PWSTR(class_name.as_ptr() as _),
             ..Default::default()
         };
-
-        let result = unsafe { WindowsAndMessaging::RegisterClassExW(&wcex) };
+        let result = unsafe { WindowsAndMessaging::RegisterClassA(&wc) };
 
         result
     }
@@ -45,8 +42,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_register() {
-        let result = WinTray::register();
-        assert_eq!(result, 0);
+    fn test_register_class() {
+        let result = WinTray::register_class();
+        assert_ne!(result, 0);
     }
 }
