@@ -1,7 +1,7 @@
 use std::{mem, ptr};
 
 use bindings::Windows::Win32::{
-    System::SystemServices::{self, CHAR, LRESULT, PSTR},
+    System::SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR},
     UI::{
         MenusAndResources::HICON,
         Shell::{
@@ -37,24 +37,23 @@ pub struct WinTray {
     nid: NOTIFYICONDATAA,
 }
 
-impl TrayIcon for WinTray {
-    fn new() -> Self {
-        let class_name = format!("{} {}", "Tray", ICON_ID);
-        let instance = unsafe { SystemServices::GetModuleHandleA(None) };
-
+impl WinTray {
+    fn register_class(name: &String, instance: &HINSTANCE) {
         let wca = WNDCLASSA {
-            lpszClassName: PSTR(class_name.as_bytes().as_ptr() as _),
+            lpszClassName: PSTR(name.as_bytes().as_ptr() as _),
             lpfnWndProc: Some(window_proc),
-            hInstance: instance,
+            hInstance: *instance,
             ..Default::default()
         };
         let res = unsafe { WindowsAndMessaging::RegisterClassA(&wca) };
         debug_assert_ne!(res, 0);
+    }
 
+    fn create_window(name: &String, instance: &HINSTANCE) -> HWND {
         let hwnd = unsafe {
             WindowsAndMessaging::CreateWindowExA(
                 Default::default(),
-                class_name,
+                PSTR(name.as_bytes().as_ptr() as _),
                 PSTR::default(),
                 Default::default(),
                 0,
@@ -63,12 +62,16 @@ impl TrayIcon for WinTray {
                 0,
                 None,
                 None,
-                instance,
+                *instance,
                 ptr::null_mut(),
             )
         };
         debug_assert_ne!(hwnd.0, 0);
 
+        hwnd
+    }
+
+    fn notify_icon(hwnd: HWND) -> NOTIFYICONDATAA {
         let mut nid = NOTIFYICONDATAA {
             cbSize: mem::size_of::<NOTIFYICONDATAA>() as u32,
             hWnd: hwnd,
@@ -89,6 +92,19 @@ impl TrayIcon for WinTray {
 
         let res = unsafe { Shell::Shell_NotifyIconA(NIM_ADD, &mut nid) };
         debug_assert_ne!(res.0, 0);
+
+        nid
+    }
+}
+
+impl TrayIcon for WinTray {
+    fn new() -> Self {
+        let name = format!("{} ({})", "Tray", ICON_ID);
+        let instance = unsafe { SystemServices::GetModuleHandleA(None) };
+
+        WinTray::register_class(&name, &instance);
+        let hwnd = WinTray::create_window(&name, &instance);
+        let nid = WinTray::notify_icon(hwnd);
 
         WinTray { nid }
     }
