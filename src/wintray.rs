@@ -1,5 +1,3 @@
-use std::{mem, ptr};
-
 use bindings::Windows::Win32::{
     System::SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR},
     UI::{
@@ -8,15 +6,21 @@ use bindings::Windows::Win32::{
             self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NOTIFYICONDATAA, NOTIFYICONDATAA_0,
         },
         WindowsAndMessaging::{
-            self, HWND, LPARAM, WM_LBUTTONDOWN, WM_RBUTTONDOWN, WNDCLASSA, WPARAM,
+            self, HWND, LPARAM, MSG, WM_APP, WM_LBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WNDCLASSA,
+            WPARAM,
         },
     },
+};
+use std::{
+    mem, ptr,
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
 };
 use windows::Guid;
 
 use crate::TrayIcon;
 
-const ICON_ID: u32 = 1;
+const ICON_ID: u32 = WM_APP + 1;
 
 extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
@@ -31,6 +35,21 @@ extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPA
     }
 
     LRESULT(0)
+}
+
+fn get_msg() {
+    let mut msg = MSG::default();
+    unsafe {
+        loop {
+            WindowsAndMessaging::GetMessageA(&mut msg, None, 0, 0);
+            if msg.message == WM_QUIT {
+                break;
+            }
+
+            WindowsAndMessaging::TranslateMessage(&mut msg);
+            WindowsAndMessaging::DispatchMessageA(&mut msg);
+        }
+    }
 }
 
 pub struct WinTray {
@@ -71,10 +90,10 @@ impl WinTray {
         hwnd
     }
 
-    fn notify_icon(hwnd: HWND) -> NOTIFYICONDATAA {
+    fn notify_icon(hwnd: &HWND) -> NOTIFYICONDATAA {
         let mut nid = NOTIFYICONDATAA {
             cbSize: mem::size_of::<NOTIFYICONDATAA>() as u32,
-            hWnd: hwnd,
+            hWnd: *hwnd,
             uID: ICON_ID,
             uFlags: NIF_ICON | NIF_MESSAGE | NIF_TIP,
             uCallbackMessage: ICON_ID,
@@ -99,12 +118,23 @@ impl WinTray {
 
 impl TrayIcon for WinTray {
     fn new() -> Self {
-        let name = format!("{} ({})", "Tray", ICON_ID);
-        let instance = unsafe { SystemServices::GetModuleHandleA(None) };
+        let (tx, rx): (Sender<NOTIFYICONDATAA>, Receiver<NOTIFYICONDATAA>) = mpsc::channel();
 
-        WinTray::register_class(&name, &instance);
-        let hwnd = WinTray::create_window(&name, &instance);
-        let nid = WinTray::notify_icon(hwnd);
+        thread::spawn(move || {
+            let name = format!("{} ({})", "Tray", ICON_ID);
+            let instance = unsafe { SystemServices::GetModuleHandleA(None) };
+            debug_assert_ne!(instance.0, 0);
+
+            WinTray::register_class(&name, &instance);
+            let hwnd = WinTray::create_window(&name, &instance);
+            let nid = WinTray::notify_icon(&hwnd);
+
+            tx.send(nid).unwrap();
+
+            get_msg();
+        });
+
+        let nid = rx.recv().unwrap();
 
         WinTray { nid }
     }

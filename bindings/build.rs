@@ -6,7 +6,8 @@ fn main() {
         },
         Windows::Win32::UI::WindowsAndMessaging::{
             DefWindowProcA, HWND, LPARAM, RegisterClassA, WM_LBUTTONDOWN, WM_RBUTTONDOWN,
-            WNDCLASSA, WPARAM, WINDOW_STYLE, CreateWindowExA,
+            WNDCLASSA, WPARAM, WINDOW_STYLE, CreateWindowExA, MSG, GetMessageA, TranslateMessage,
+            DispatchMessageA, WM_APP, WM_QUIT,
         },
         Windows::Win32::UI::MenusAndResources::HICON,
     );
