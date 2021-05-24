@@ -1,12 +1,15 @@
 use bindings::Windows::Win32::{
-    System::SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR},
+    System::SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
     UI::{
+        Controls::LR_LOADFROMFILE,
         MenusAndResources::HICON,
         Shell::{
-            self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NOTIFYICONDATAA, NOTIFYICONDATAA_0,
+            self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_MODIFY, NOTIFYICONDATAA,
+            NOTIFYICONDATAA_0,
         },
         WindowsAndMessaging::{
-            self, HWND, LPARAM, MSG, WM_APP, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP, WNDCLASSA, WPARAM,
+            self, HWND, IMAGE_ICON, LPARAM, MSG, WM_APP, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP,
+            WNDCLASSA, WPARAM,
         },
     },
 };
@@ -15,7 +18,7 @@ use std::{
     sync::mpsc::{self, Receiver, Sender},
     thread,
 };
-use windows::Guid;
+use windows::{Guid, HSTRING};
 
 use crate::TrayIcon;
 
@@ -136,5 +139,24 @@ impl TrayIcon for WinTray {
         let nid = rx.recv().unwrap();
 
         WinTray { nid }
+    }
+
+    fn set_icon(&mut self, path: &str) {
+        let hicon = unsafe {
+            WindowsAndMessaging::LoadImageW(
+                HINSTANCE::NULL,
+                PWSTR(HSTRING::from(path).as_wide().as_ptr() as _),
+                IMAGE_ICON,
+                0,
+                0,
+                LR_LOADFROMFILE,
+            )
+        };
+        debug_assert_ne!(hicon.0, 0);
+
+        self.nid.hIcon = HICON(hicon.0);
+
+        let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
+        debug_assert_ne!(res.0, 0);
     }
 }
