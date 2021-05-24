@@ -6,8 +6,7 @@ use bindings::Windows::Win32::{
             self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NOTIFYICONDATAA, NOTIFYICONDATAA_0,
         },
         WindowsAndMessaging::{
-            self, HWND, LPARAM, MSG, WM_APP, WM_LBUTTONDOWN, WM_QUIT, WM_RBUTTONDOWN, WNDCLASSA,
-            WPARAM,
+            self, HWND, LPARAM, MSG, WM_APP, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP, WNDCLASSA, WPARAM,
         },
     },
 };
@@ -25,8 +24,8 @@ const ICON_ID: u32 = WM_APP + 1;
 extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
         ICON_ID => match lparam.0 as u32 {
-            WM_LBUTTONDOWN => println!("Left Click!"),
-            WM_RBUTTONDOWN => println!("Right Click!"),
+            WM_LBUTTONUP => println!("Left Click!"),
+            WM_RBUTTONUP => println!("Right Click!"),
             _ => (),
         },
         _ => unsafe {

@@ -5,7 +5,7 @@ fn main() {
             NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NOTIFYICONDATAA, Shell_NotifyIconA,
         },
         Windows::Win32::UI::WindowsAndMessaging::{
-            DefWindowProcA, HWND, LPARAM, RegisterClassA, WM_LBUTTONDOWN, WM_RBUTTONDOWN,
+            DefWindowProcA, HWND, LPARAM, RegisterClassA, WM_LBUTTONUP, WM_RBUTTONUP,
             WNDCLASSA, WPARAM, WINDOW_STYLE, CreateWindowExA, MSG, GetMessageA, TranslateMessage,
             DispatchMessageA, WM_APP, WM_QUIT,
         },
