@@ -159,4 +159,18 @@ impl TrayIcon for WinTray {
         let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
         debug_assert_ne!(res.0, 0);
     }
+
+    fn set_tooltip(&mut self, text: &str) {
+        let mut tooltip = text.as_bytes();
+        if tooltip.len() > self.nid.szTip.len() {
+            tooltip = &tooltip[..self.nid.szTip.len()];
+        }
+
+        for i in 0..tooltip.len() {
+            self.nid.szTip[i] = CHAR(tooltip[i]);
+        }
+
+        let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
+        debug_assert_ne!(res.0, 0);
+    }
 }
