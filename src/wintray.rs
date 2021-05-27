@@ -20,7 +20,7 @@ use std::{
 };
 use windows::{Guid, HSTRING};
 
-use crate::TrayIcon;
+use crate::{error::Error, TrayIcon};
 
 const ICON_ID: u32 = WM_APP + 1;
 
@@ -141,7 +141,7 @@ impl TrayIcon for WinTray {
         WinTray { nid }
     }
 
-    fn set_icon(&mut self, path: &str) {
+    fn set_icon(&mut self, path: &str) -> Result<(), Error> {
         let hicon = unsafe {
             WindowsAndMessaging::LoadImageW(
                 HINSTANCE::NULL,
@@ -152,12 +152,18 @@ impl TrayIcon for WinTray {
                 LR_LOADFROMFILE,
             )
         };
-        debug_assert_ne!(hicon.0, 0);
+        if hicon.0 == 0 {
+            return Err(Error::InvalidImage);
+        }
 
         self.nid.hIcon = HICON(hicon.0);
 
         let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
-        debug_assert_ne!(res.0, 0);
+        if res.0 == 0 {
+            return Err(Error::InvalidImage);
+        }
+
+        Ok(())
     }
 
     fn set_tooltip(&mut self, text: &str) {
