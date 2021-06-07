@@ -13,11 +13,7 @@ use bindings::Windows::Win32::{
         },
     },
 };
-use std::{
-    mem, ptr,
-    sync::mpsc::{self, Receiver, Sender},
-    thread,
-};
+use std::{mem, ptr, sync::mpsc, thread};
 use windows::{Guid, HSTRING};
 
 use crate::{error::Error, TrayIcon};
@@ -120,7 +116,7 @@ impl WinTray {
 
 impl TrayIcon for WinTray {
     fn new() -> Self {
-        let (tx, rx): (Sender<NOTIFYICONDATAA>, Receiver<NOTIFYICONDATAA>) = mpsc::channel();
+        let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
             let name = format!("{} ({})", "Tray", ICON_ID);
@@ -141,11 +137,11 @@ impl TrayIcon for WinTray {
         WinTray { nid }
     }
 
-    fn set_icon(&mut self, path: &str) -> Result<(), Error> {
+    fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error> {
         let hicon = unsafe {
             WindowsAndMessaging::LoadImageW(
                 HINSTANCE::NULL,
-                PWSTR(HSTRING::from(path).as_wide().as_ptr() as _),
+                PWSTR(HSTRING::from(path.as_ref()).as_wide().as_ptr() as _),
                 IMAGE_ICON,
                 0,
                 0,
@@ -166,8 +162,8 @@ impl TrayIcon for WinTray {
         Ok(())
     }
 
-    fn set_tooltip(&mut self, text: &str) {
-        let mut tooltip = text.as_bytes();
+    fn set_tooltip<S: AsRef<str>>(&mut self, text: S) {
+        let mut tooltip = text.as_ref().as_bytes();
         if tooltip.len() > self.nid.szTip.len() {
             tooltip = &tooltip[..self.nid.szTip.len()];
         }

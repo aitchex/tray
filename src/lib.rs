@@ -9,6 +9,6 @@ pub type Tray = WinTray;
 
 pub trait TrayIcon {
     fn new() -> Self;
-    fn set_icon(&mut self, path: &str) -> Result<(), Error>;
-    fn set_tooltip(&mut self, text: &str);
+    fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error>;
+    fn set_tooltip<S: AsRef<str>>(&mut self, text: S);
 }
