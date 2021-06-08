@@ -159,6 +159,8 @@ impl TrayIcon for WinTray {
             return Err(Error::InvalidImage);
         }
 
+        unsafe { WindowsAndMessaging::DestroyIcon(HICON(hicon.0)) };
+
         Ok(())
     }
 
