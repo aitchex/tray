@@ -1,13 +1,16 @@
 use bindings::Windows::Win32::{
-    Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, PSTR, PWSTR, WPARAM},
-    System::{LibraryLoader, SystemServices::CHAR},
+    System::SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
     UI::{
         Controls::LR_LOADFROMFILE,
+        MenusAndResources::HICON,
         Shell::{
             self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_MODIFY, NOTIFYICONDATAA,
             NOTIFYICONDATAA_0,
         },
-        WindowsAndMessaging::{self, HICON, IMAGE_ICON, MSG, WM_APP, WM_QUIT, WNDCLASSA},
+        WindowsAndMessaging::{
+            self, HWND, IMAGE_ICON, LPARAM, MSG, WM_APP, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP,
+            WNDCLASSA, WPARAM,
+        },
     },
 };
 use std::{mem, ptr, sync::mpsc, thread};
@@ -117,7 +120,7 @@ impl TrayIcon for WinTray {
 
         thread::spawn(move || {
             let name = format!("{} ({})", "Tray", ICON_ID);
-            let instance = unsafe { LibraryLoader::GetModuleHandleA(None) };
+            let instance = unsafe { SystemServices::GetModuleHandleA(None) };
             debug_assert_ne!(instance.0, 0);
 
             WinTray::register_class(&name, &instance);
