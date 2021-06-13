@@ -8,7 +8,7 @@ mod wintray;
 pub type Tray = WinTray;
 
 pub trait TrayIcon {
-    fn new() -> Self;
-    fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error>;
+    fn new() -> Result<Tray, Error>;
     fn set_tooltip<S: AsRef<str>>(&mut self, text: S);
+    fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error>;
 }

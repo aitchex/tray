@@ -1,5 +1,8 @@
 use bindings::Windows::Win32::{
-    System::SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
+    System::{
+        Diagnostics::Debug,
+        SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
+    },
     UI::{
         Controls::LR_LOADFROMFILE,
         MenusAndResources::HICON,
@@ -55,18 +58,34 @@ pub struct WinTray {
 }
 
 impl WinTray {
-    fn register_class(name: &String, instance: &HINSTANCE) {
+    fn get_module_handle() -> Result<HINSTANCE, Error> {
+        let instance = unsafe { SystemServices::GetModuleHandleA(None) };
+        if instance.0 == 0 {
+            let err = unsafe { Debug::GetLastError() };
+            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
+        }
+
+        Ok(instance)
+    }
+
+    fn register_class(name: &String, instance: &HINSTANCE) -> Result<(), Error> {
         let wca = WNDCLASSA {
             lpszClassName: PSTR(name.as_bytes().as_ptr() as _),
             lpfnWndProc: Some(window_proc),
             hInstance: *instance,
             ..Default::default()
         };
-        let res = unsafe { WindowsAndMessaging::RegisterClassA(&wca) };
-        debug_assert_ne!(res, 0);
+
+        let result = unsafe { WindowsAndMessaging::RegisterClassA(&wca) };
+        if result == 0 {
+            let err = unsafe { Debug::GetLastError() };
+            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
+        }
+
+        Ok(())
     }
 
-    fn create_window(name: &String, instance: &HINSTANCE) -> HWND {
+    fn create_window(name: &String, instance: &HINSTANCE) -> Result<HWND, Error> {
         let hwnd = unsafe {
             WindowsAndMessaging::CreateWindowExA(
                 Default::default(),
@@ -83,12 +102,15 @@ impl WinTray {
                 ptr::null_mut(),
             )
         };
-        debug_assert_ne!(hwnd.0, 0);
+        if hwnd.0 == 0 {
+            let err = unsafe { Debug::GetLastError() };
+            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
+        }
 
-        hwnd
+        Ok(hwnd)
     }
 
-    fn notify_icon(hwnd: &HWND) -> NOTIFYICONDATAA {
+    fn notify_icon(hwnd: &HWND) -> Result<NOTIFYICONDATAA, Error> {
         let mut nid = NOTIFYICONDATAA {
             cbSize: mem::size_of::<NOTIFYICONDATAA>() as u32,
             hWnd: *hwnd,
@@ -107,34 +129,73 @@ impl WinTray {
             hBalloonIcon: HICON::default(),
         };
 
-        let res = unsafe { Shell::Shell_NotifyIconA(NIM_ADD, &mut nid) };
-        debug_assert_ne!(res.0, 0);
+        let result = unsafe { Shell::Shell_NotifyIconA(NIM_ADD, &mut nid) };
+        if !result.as_bool() {
+            let err = unsafe { Debug::GetLastError() };
+            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
+        }
 
-        nid
+        Ok(nid)
     }
 }
 
 impl TrayIcon for WinTray {
-    fn new() -> Self {
+    fn new() -> Result<Self, Error> {
         let (tx, rx) = mpsc::channel();
 
         thread::spawn(move || {
             let name = format!("{} ({})", "Tray", ICON_ID);
-            let instance = unsafe { SystemServices::GetModuleHandleA(None) };
-            debug_assert_ne!(instance.0, 0);
 
-            WinTray::register_class(&name, &instance);
-            let hwnd = WinTray::create_window(&name, &instance);
-            let nid = WinTray::notify_icon(&hwnd);
+            let instance = match WinTray::get_module_handle() {
+                Ok(instanse) => instanse,
+                Err(err) => {
+                    tx.send(Err(err)).unwrap();
+                    return;
+                }
+            };
 
-            tx.send(nid).unwrap();
+            if let Err(err) = WinTray::register_class(&name, &instance) {
+                tx.send(Err(err)).unwrap();
+                return;
+            }
+
+            let hwnd = match WinTray::create_window(&name, &instance) {
+                Ok(hwnd) => hwnd,
+                Err(err) => {
+                    tx.send(Err(err)).unwrap();
+                    return;
+                }
+            };
+
+            match WinTray::notify_icon(&hwnd) {
+                Ok(nid) => tx.send(Ok(nid)).unwrap(),
+                Err(err) => {
+                    tx.send(Err(err)).unwrap();
+                    return;
+                }
+            };
 
             get_msg();
         });
 
-        let nid = rx.recv().unwrap();
+        match rx.recv().unwrap() {
+            Ok(nid) => Ok(WinTray { nid }),
+            Err(err) => Err(err),
+        }
+    }
 
-        WinTray { nid }
+    fn set_tooltip<S: AsRef<str>>(&mut self, text: S) {
+        let mut tooltip = text.as_ref().as_bytes();
+        if tooltip.len() > self.nid.szTip.len() {
+            tooltip = &tooltip[..self.nid.szTip.len()];
+        }
+
+        for i in 0..tooltip.len() {
+            self.nid.szTip[i] = CHAR(tooltip[i]);
+        }
+
+        let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
+        debug_assert_ne!(res.0, 0);
     }
 
     fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error> {
@@ -163,18 +224,17 @@ impl TrayIcon for WinTray {
 
         Ok(())
     }
+}
 
-    fn set_tooltip<S: AsRef<str>>(&mut self, text: S) {
-        let mut tooltip = text.as_ref().as_bytes();
-        if tooltip.len() > self.nid.szTip.len() {
-            tooltip = &tooltip[..self.nid.szTip.len()];
-        }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::*;
 
-        for i in 0..tooltip.len() {
-            self.nid.szTip[i] = CHAR(tooltip[i]);
-        }
+    #[test]
+    fn test_tray() -> Result<(), Error> {
+        Tray::new()?;
 
-        let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
-        debug_assert_ne!(res.0, 0);
+        Ok(())
     }
 }
