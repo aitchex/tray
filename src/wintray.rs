@@ -137,6 +137,16 @@ impl WinTray {
 
         Ok(nid)
     }
+
+    fn modify_icon(&mut self) -> Result<(), Error> {
+        let result = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
+        if !result.as_bool() {
+            let err = unsafe { Debug::GetLastError() };
+            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
+        }
+
+        Ok(())
+    }
 }
 
 impl TrayIcon for WinTray {
@@ -188,21 +198,15 @@ impl TrayIcon for WinTray {
         let tooltip = text.as_ref().as_bytes();
 
         if tooltip.len() > self.nid.szTip.len() {
-            return Err(Error::OutOfRange(format!(
-                "Exceeded the {} characters limit",
-                self.nid.szTip.len()
-            )));
+            let err = format!("Exceeded the {} characters limit", self.nid.szTip.len());
+            return Err(Error::OutOfRange(err));
         }
 
         for i in 0..tooltip.len() {
             self.nid.szTip[i] = CHAR(tooltip[i]);
         }
 
-        let result = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
-        if !result.as_bool() {
-            let err = unsafe { Debug::GetLastError() };
-            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
-        }
+        self.modify_icon()?;
 
         Ok(())
     }
@@ -230,11 +234,7 @@ impl TrayIcon for WinTray {
         }
 
         self.nid.hIcon = HICON(hicon.0);
-
-        let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
-        if res.0 == 0 {
-            return Err(Error::InvalidImage);
-        }
+        self.modify_icon()?;
 
         unsafe { WindowsAndMessaging::DestroyIcon(HICON(hicon.0)) };
 
