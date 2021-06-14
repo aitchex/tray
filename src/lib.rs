@@ -20,7 +20,9 @@ mod tests {
     #[test]
     fn test_tray() -> Result<(), Error> {
         let mut tray = Tray::new()?;
-        tray.set_tooltip("Testing ")?;
+        tray.set_tooltip("Testing tray icon...")?;
+        tray.set_icon("res/111.ico")?;
+        tray.set_icon("res/222.ico")?;
 
         Ok(())
     }

@@ -1,6 +1,6 @@
 use bindings::Windows::Win32::{
     System::{
-        Diagnostics::Debug,
+        Diagnostics::Debug::{self, ERROR_FILE_NOT_FOUND},
         SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
     },
     UI::{
@@ -219,7 +219,14 @@ impl TrayIcon for WinTray {
             )
         };
         if hicon.0 == 0 {
-            return Err(Error::InvalidImage);
+            let err = unsafe { Debug::GetLastError() };
+            match err {
+                ERROR_FILE_NOT_FOUND => {
+                    let err = String::from("Could not find the specified icon");
+                    return Err(Error::NotFound(err));
+                }
+                _ => return Err(Error::UnknownError(format!("System error code: {}", err.0))),
+            }
         }
 
         self.nid.hIcon = HICON(hicon.0);

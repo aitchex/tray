@@ -1,6 +1,6 @@
 fn main() {
     windows::build!(
-        Windows::Win32::System::Diagnostics::Debug::GetLastError,
+        Windows::Win32::System::Diagnostics::Debug::{GetLastError, ERROR_FILE_NOT_FOUND},
         Windows::Win32::System::SystemServices::{GetModuleHandleA, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
         Windows::Win32::UI::Controls::LR_LOADFROMFILE,
         Windows::Win32::UI::MenusAndResources::HICON,
