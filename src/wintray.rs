@@ -184,18 +184,27 @@ impl TrayIcon for WinTray {
         }
     }
 
-    fn set_tooltip<S: AsRef<str>>(&mut self, text: S) {
-        let mut tooltip = text.as_ref().as_bytes();
+    fn set_tooltip<S: AsRef<str>>(&mut self, text: S) -> Result<(), Error> {
+        let tooltip = text.as_ref().as_bytes();
+
         if tooltip.len() > self.nid.szTip.len() {
-            tooltip = &tooltip[..self.nid.szTip.len()];
+            return Err(Error::OutOfRange(format!(
+                "Exceeded the {} characters limit",
+                self.nid.szTip.len()
+            )));
         }
 
         for i in 0..tooltip.len() {
             self.nid.szTip[i] = CHAR(tooltip[i]);
         }
 
-        let res = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
-        debug_assert_ne!(res.0, 0);
+        let result = unsafe { Shell::Shell_NotifyIconA(NIM_MODIFY, &mut self.nid) };
+        if !result.as_bool() {
+            let err = unsafe { Debug::GetLastError() };
+            return Err(Error::UnknownError(format!("System error code: {}", err.0)));
+        }
+
+        Ok(())
     }
 
     fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error> {
@@ -221,19 +230,6 @@ impl TrayIcon for WinTray {
         }
 
         unsafe { WindowsAndMessaging::DestroyIcon(HICON(hicon.0)) };
-
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::*;
-
-    #[test]
-    fn test_tray() -> Result<(), Error> {
-        Tray::new()?;
 
         Ok(())
     }
