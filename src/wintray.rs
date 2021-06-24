@@ -16,48 +16,66 @@ use bindings::Windows::Win32::{
         },
     },
 };
-use std::{mem, ptr, sync::mpsc, thread};
+use std::{
+    cell::RefCell,
+    mem, ptr,
+    sync::mpsc::{self, Receiver, Sender},
+    thread,
+};
 use windows::{Guid, HSTRING};
 
-use crate::{error::Error, TrayIcon};
+use crate::{error::Error, Click, TrayIcon};
 
 const ICON_ID: u32 = WM_APP + 1;
 
-extern "system" fn window_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    match msg {
-        ICON_ID => match lparam.0 as u32 {
-            WM_LBUTTONUP => println!("Left Click!"),
-            WM_RBUTTONUP => println!("Right Click!"),
-            _ => (),
-        },
-        _ => unsafe {
-            return WindowsAndMessaging::DefWindowProcA(hwnd, msg, wparam, lparam);
-        },
-    }
+thread_local!(static CLICK_TX: RefCell<Option<Sender<Click>>> = RefCell::new(None));
 
-    LRESULT(0)
-}
-
-fn get_msg() {
-    let mut msg = MSG::default();
-    unsafe {
-        loop {
-            WindowsAndMessaging::GetMessageA(&mut msg, None, 0, 0);
-            if msg.message == WM_QUIT {
-                break;
-            }
-
-            WindowsAndMessaging::TranslateMessage(&mut msg);
-            WindowsAndMessaging::DispatchMessageA(&mut msg);
-        }
-    }
-}
+type Callback = Box<(dyn FnMut() -> () + Send + Sync + 'static)>;
 
 pub struct WinTray {
     nid: NOTIFYICONDATAA,
+    callback_tx: Sender<(Click, Callback)>,
 }
 
 impl WinTray {
+    extern "system" fn wnd_proc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        fn send(click: Click) {
+            CLICK_TX.with(|click_tx| {
+                if let Some(tx) = click_tx.borrow_mut().as_ref() {
+                    tx.send(click).unwrap();
+                }
+            });
+        }
+
+        match msg {
+            ICON_ID => match lparam.0 as u32 {
+                WM_LBUTTONUP => send(Click::Left),
+                WM_RBUTTONUP => send(Click::Right),
+                _ => (),
+            },
+            _ => unsafe {
+                return WindowsAndMessaging::DefWindowProcA(hwnd, msg, wparam, lparam);
+            },
+        }
+
+        LRESULT(0)
+    }
+
+    fn get_msg() {
+        let mut msg = MSG::default();
+        unsafe {
+            loop {
+                WindowsAndMessaging::GetMessageA(&mut msg, None, 0, 0);
+                if msg.message == WM_QUIT {
+                    break;
+                }
+
+                WindowsAndMessaging::TranslateMessage(&mut msg);
+                WindowsAndMessaging::DispatchMessageA(&mut msg);
+            }
+        }
+    }
+
     fn get_module_handle() -> Result<HINSTANCE, Error> {
         let instance = unsafe { SystemServices::GetModuleHandleA(None) };
         if instance.0 == 0 {
@@ -68,10 +86,16 @@ impl WinTray {
         Ok(instance)
     }
 
-    fn register_class(name: &String, instance: &HINSTANCE) -> Result<(), Error> {
+    fn register_class(name: &String, instance: &HINSTANCE) -> Result<Receiver<Click>, Error> {
+        let (tx, rx) = mpsc::channel();
+
+        CLICK_TX.with(|click_tx| {
+            (*click_tx.borrow_mut()) = Some(tx);
+        });
+
         let wca = WNDCLASSA {
             lpszClassName: PSTR(name.as_bytes().as_ptr() as _),
-            lpfnWndProc: Some(window_proc),
+            lpfnWndProc: Some(WinTray::wnd_proc),
             hInstance: *instance,
             ..Default::default()
         };
@@ -82,7 +106,7 @@ impl WinTray {
             return Err(Error::UnknownError(format!("System error code: {}", err.0)));
         }
 
-        Ok(())
+        Ok(rx)
     }
 
     fn create_window(name: &String, instance: &HINSTANCE) -> Result<HWND, Error> {
@@ -164,10 +188,42 @@ impl TrayIcon for WinTray {
                 }
             };
 
-            if let Err(err) = WinTray::register_class(&name, &instance) {
-                tx.send(Err(err)).unwrap();
-                return;
-            }
+            let click_rx = match WinTray::register_class(&name, &instance) {
+                Ok(rx) => rx,
+                Err(err) => {
+                    tx.send(Err(err)).unwrap();
+                    return;
+                }
+            };
+
+            let (callback_tx, callback_rx): (
+                Sender<(Click, Callback)>,
+                Receiver<(Click, Callback)>,
+            ) = mpsc::channel();
+
+            thread::spawn(move || {
+                let mut left_callback: Callback = Box::new(|| {});
+                let mut right_callback: Callback = Box::new(|| {});
+
+                loop {
+                    let click = click_rx.recv().unwrap();
+
+                    loop {
+                        match callback_rx.try_recv() {
+                            Ok((clk, f)) => match clk {
+                                Click::Left => left_callback = f,
+                                Click::Right => right_callback = f,
+                            },
+                            Err(_) => break,
+                        }
+                    }
+
+                    match click {
+                        Click::Left => left_callback(),
+                        Click::Right => right_callback(),
+                    }
+                }
+            });
 
             let hwnd = match WinTray::create_window(&name, &instance) {
                 Ok(hwnd) => hwnd,
@@ -177,21 +233,22 @@ impl TrayIcon for WinTray {
                 }
             };
 
-            match WinTray::notify_icon(&hwnd) {
-                Ok(nid) => tx.send(Ok(nid)).unwrap(),
+            let nid = match WinTray::notify_icon(&hwnd) {
+                Ok(nid) => nid,
                 Err(err) => {
                     tx.send(Err(err)).unwrap();
                     return;
                 }
             };
 
-            get_msg();
+            tx.send(Ok((nid, callback_tx))).unwrap();
+
+            WinTray::get_msg();
         });
 
-        match rx.recv().unwrap() {
-            Ok(nid) => Ok(WinTray { nid }),
-            Err(err) => Err(err),
-        }
+        let (nid, callback_tx) = rx.recv().unwrap()?;
+
+        Ok(WinTray { nid, callback_tx })
     }
 
     fn set_tooltip<S: AsRef<str>>(&mut self, text: S) -> Result<(), Error> {
@@ -239,5 +296,12 @@ impl TrayIcon for WinTray {
         unsafe { WindowsAndMessaging::DestroyIcon(HICON(hicon.0)) };
 
         Ok(())
+    }
+
+    fn on_click<F>(&self, click: Click, callback: F)
+    where
+        F: 'static + FnMut() -> () + Send + Sync,
+    {
+        self.callback_tx.send((click, Box::new(callback))).unwrap();
     }
 }
