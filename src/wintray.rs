@@ -1,18 +1,20 @@
+use crate::{error::Error, Click, TrayIcon};
+
 use bindings::Windows::Win32::{
+    Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, PSTR, PWSTR, WPARAM},
     System::{
         Diagnostics::Debug::{self, ERROR_FILE_NOT_FOUND},
-        SystemServices::{self, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
+        LibraryLoader,
+        SystemServices::CHAR,
     },
     UI::{
         Controls::LR_LOADFROMFILE,
-        MenusAndResources::HICON,
         Shell::{
             self, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_MODIFY, NOTIFYICONDATAA,
             NOTIFYICONDATAA_0,
         },
         WindowsAndMessaging::{
-            self, HWND, IMAGE_ICON, LPARAM, MSG, WM_APP, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP,
-            WNDCLASSA, WPARAM,
+            self, HICON, IMAGE_ICON, MSG, WM_APP, WM_LBUTTONUP, WM_QUIT, WM_RBUTTONUP, WNDCLASSA,
         },
     },
 };
@@ -23,8 +25,6 @@ use std::{
     thread,
 };
 use windows::{Guid, HSTRING};
-
-use crate::{error::Error, Click, TrayIcon};
 
 const ICON_ID: u32 = WM_APP + 1;
 
@@ -77,7 +77,7 @@ impl WinTray {
     }
 
     fn get_module_handle() -> Result<HINSTANCE, Error> {
-        let instance = unsafe { SystemServices::GetModuleHandleA(None) };
+        let instance = unsafe { LibraryLoader::GetModuleHandleA(None) };
         if instance.0 == 0 {
             let err = unsafe { Debug::GetLastError() };
             return Err(Error::UnknownError(format!("System error code: {}", err.0)));

@@ -1,16 +1,14 @@
 fn main() {
     windows::build!(
-        Windows::Win32::System::Diagnostics::Debug::{GetLastError, ERROR_FILE_NOT_FOUND},
-        Windows::Win32::System::SystemServices::{GetModuleHandleA, CHAR, HINSTANCE, LRESULT, PSTR, PWSTR},
-        Windows::Win32::UI::Controls::LR_LOADFROMFILE,
-        Windows::Win32::UI::MenusAndResources::HICON,
-        Windows::Win32::UI::Shell::{
-            NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_MODIFY, NOTIFYICONDATAA, Shell_NotifyIconA,
-        },
+        Windows::Win32::Foundation::{HINSTANCE, LRESULT, PSTR, PWSTR, HWND, LPARAM, WPARAM},
+        Windows::Win32::System::Diagnostics::Debug::{GetLastError, WIN32_ERROR},
+        Windows::Win32::UI::Shell::{NOTIFYICONDATAA, Shell_NotifyIconA},
+        Windows::Win32::System::SystemServices::{CHAR},
         Windows::Win32::UI::WindowsAndMessaging::{
-            DefWindowProcA, HWND, LPARAM, RegisterClassA, WM_LBUTTONUP, WM_RBUTTONUP,
-            WNDCLASSA, WPARAM, WINDOW_STYLE, CreateWindowExA, MSG, GetMessageA, TranslateMessage,
-            DispatchMessageA, WM_APP, WM_QUIT, LoadImageW, IMAGE_ICON, DestroyIcon,
+            DefWindowProcA, RegisterClassA, WM_LBUTTONUP, WM_RBUTTONUP,
+            WNDCLASSA, WINDOW_STYLE, CreateWindowExA, MSG, GetMessageA, TranslateMessage,
+            DispatchMessageA, WM_APP, WM_QUIT, LoadImageW, DestroyIcon, HICON
         },
+        Windows::Win32::System::LibraryLoader::GetModuleHandleA,
     );
 }
