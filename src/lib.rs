@@ -29,13 +29,16 @@ mod tests {
     fn test_tray() -> Result<(), Error> {
         let mut tray = Tray::new()?;
 
-        tray.set_tooltip("Testing tray icon...")?;
+        tray.set_tooltip("Testing tooltip with a text longer than Lorem Ipsum")?;
+        tray.set_tooltip("Lorem Ipsum")?;
 
         tray.set_icon("res/111.ico")?;
         tray.set_icon("res/222.ico")?;
 
         tray.on_click(Click::Left, || println!("Left Click"));
         tray.on_click(Click::Right, || println!("Right Click"));
+
+        // std::thread::sleep(core::time::Duration::from_secs(10));
 
         Ok(())
     }

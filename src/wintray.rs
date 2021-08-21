@@ -259,6 +259,8 @@ impl TrayIcon for WinTray {
             return Err(Error::OutOfRange(err));
         }
 
+        self.nid.szTip = [CHAR::default(); 128];
+
         for i in 0..tooltip.len() {
             self.nid.szTip[i] = CHAR(tooltip[i]);
         }
