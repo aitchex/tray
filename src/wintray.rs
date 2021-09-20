@@ -273,7 +273,7 @@ impl TrayIcon for WinTray {
     fn set_icon<S: AsRef<str>>(&mut self, path: S) -> Result<(), Error> {
         let hicon = unsafe {
             WindowsAndMessaging::LoadImageW(
-                HINSTANCE::NULL,
+                HINSTANCE::default(),
                 PWSTR(HSTRING::from(path.as_ref()).as_wide().as_ptr() as _),
                 IMAGE_ICON,
                 0,
